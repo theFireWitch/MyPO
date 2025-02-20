@@ -2,3 +2,6 @@
 *.lib
 *.o
 *.obj
+*.tlog
+*.log
+*.ilk
