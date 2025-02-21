@@ -23,8 +23,8 @@ void MultyThreadFunc(int start, int end, vector<int> A, vector<int> B, int k, ve
 bool Test();
 
 int main() {
-	vector<int> arraySizes = { 512, 5120, 10240, 102400, 1024000};
-	vector<int> threadNums = { 2, 4, 8, 16, 32, 64, 128 };
+	int arraySizes[5] = { 512, 5120, 10240, 102400, 1024000 };
+	int threadNums[7] = {2, 4, 8, 16, 32, 64, 128};
 	if (Test()) {
 		return 0;
 	}
