@@ -14,7 +14,7 @@ int NullGen() {
 	return 0;
 }
 
-void MultyThreadFunc(int start, int end, vector<int> A, vector<int> B, int k, vector<int>& C) {
+void MultyThreadFunc(int start, int end, vector<int>& A, vector<int>& B, int k, vector<int>& C) {
 	for (int i = start; i < end; i++) {
 		C[i] = A[i] - k * B[i];
 	}
@@ -38,7 +38,7 @@ int main() {
 		generate(arrayB.begin(), arrayB.end(), randGen);
 		
 		auto start = chrono::high_resolution_clock::now();
-		MultyThreadFunc(0, size, arrayA, arrayB, k, arrayC);
+		MultyThreadFunc(0, size, ref(arrayA), ref(arrayB), k, ref(arrayC));
 		auto end = chrono::high_resolution_clock::now();
 		auto time = chrono::duration_cast<chrono::nanoseconds>(end - start).count() * 1e-9;
 		cout << "One thread time: " << time << " seconds, " << endl;
