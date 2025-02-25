@@ -46,15 +46,15 @@ int main() {
 		for (const auto& threadNum : threadNums) {
 			generate(arrayC.begin(), arrayC.end(), NullGen);
 			vector<thread> Threads(threadNum);
-			int rowsForOneThread = size / threadNum;
+			int ElementsForOneThread = size / threadNum;
 			
 			auto start = chrono::high_resolution_clock::now();
 			for (int i = 0; i < threadNum; i++) {
 
-				int startRow = rowsForOneThread * i;
-				int endRow = startRow + rowsForOneThread;
+				int startElement = ElementsForOneThread * i;
+				int endElement = startElement + ElementsForOneThread;
 
-				Threads.push_back(thread(MultyThreadFunc, startRow, endRow, ref(arrayA), ref(arrayB), k, ref(arrayC)));
+				Threads.push_back(thread(MultyThreadFunc, startElement, endElement, ref(arrayA), ref(arrayB), k, ref(arrayC)));
 			}
 			for (auto& t : Threads) {
 				if (t.joinable()) {
@@ -87,13 +87,13 @@ bool Test() {
 
 	int threadsnum = 4;
 	vector<thread> Threads(threadsnum);
-	int rowsForOneThread = size / threadsnum;
+	int ElementsForOneThread = size / threadsnum;
 
 	for (int i = 0; i < threadsnum; i++) {
-		int startRow = rowsForOneThread * i;
-		int endRow = startRow + rowsForOneThread;
+		int startElement = ElementsForOneThread * i;
+		int endElement = startElement + ElementsForOneThread;
 
-		Threads.push_back(thread(MultyThreadFunc, startRow, endRow, ref(arrayA), ref(arrayB), k, ref(arrayC)));
+		Threads.push_back(thread(MultyThreadFunc, startElement, endElement, ref(arrayA), ref(arrayB), k, ref(arrayC)));
 	}
 	for (auto& t : Threads) {
 		if (t.joinable()) {
