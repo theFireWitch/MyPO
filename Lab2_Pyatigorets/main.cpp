@@ -4,7 +4,6 @@
 #include <vector>
 #include <atomic>
 #include <mutex>
-#include <algorithm>
 #include <ctime>
 
 using namespace std;
@@ -20,18 +19,28 @@ void MutexFunc(int rand, int start, int end,  int& count, int& max, vector<int>&
 
 	for (int i = start; i < end; i++) {
 		if (array[i] > rand) {
-			//mutCount.lock();
 			lock_guard<mutex> lg(mutCount);
 			count++;
-			//mutCount.unlock();
 		}
 		lock_guard<mutex> lg(mutMax);
 		if (array[i] > max) max = array[i];
 	}
 }
 
-void СMPXCHGFunc() {
-
+void СMPXCHGFunc(int rand, int start, int end, atomic<int>& count, atomic<int>& max, vector<int>& array) {
+	int expected;
+	int New;
+	for (int i = start; i < end; i++) {
+		if (array[i] > rand) {
+			do {
+				expected = count.load();
+				New = expected + 1;
+			} while (!count.compare_exchange_strong(expected, New));
+		}
+		while ((array[i] > (expected = max.load())) && !max.compare_exchange_strong(expected, array[i])) {
+			//expected = max.load();
+		};
+	}
 }
 
 int main()
@@ -49,6 +58,8 @@ int main()
 		vector<int> array(size);
 		for (int i = 0; i < size; i++)
 			array[i] = rand() % 10001;
+		count = 0;
+		maxVal = INT32_MIN;
 
 		auto start = chrono::high_resolution_clock::now();
 		OneThreadFunc(randNum, count, maxVal, ref(array));
@@ -56,6 +67,7 @@ int main()
 		auto time = chrono::duration_cast<chrono::nanoseconds>(end - start).count() * 1e-9;
 		cout << "One thread time: " << time << " seconds, ";
 		cout << "max = " << maxVal << ", count = " << count << endl;
+
 		for (const auto& threadNum : threadNums) {
 			count = 0;
 			maxVal = INT32_MIN;
@@ -66,7 +78,7 @@ int main()
 			auto start = chrono::high_resolution_clock::now();
 			for (int i = 0; i < threadNum; i++) {
 				int startElement = ElementsForOneThread * i;
-				int endElement = (i == threadNum - 1) ? size : startElement + ElementsForOneThread;
+				int endElement = (i == threadNum - 1) ? size : (startElement + ElementsForOneThread > size) ? size : startElement + ElementsForOneThread;
 				Threads.push_back(thread(MutexFunc, randNum, startElement, endElement, ref(count), ref(maxVal), ref(array), ref(MUTcount), ref(MUTmax)));
 			}
 			for (auto& t : Threads) {
@@ -80,16 +92,16 @@ int main()
 			cout << "max = " << maxVal << ", count = " << count << endl;
 		}
 		for (const auto& threadNum : threadNums) {
-			count = 0;
-			maxVal = INT32_MIN;
+			atomic <int> atomic_count = 0;
+			atomic <int> atomic_maxVal = INT32_MIN;
 			vector<thread> Threads(threadNum);
 			int ElementsForOneThread = size / threadNum + ((size % threadNum == 0) ? 0 : 1);
 
 			auto start = chrono::high_resolution_clock::now();
 			for (int i = 0; i < threadNum; i++) {
 				int startElement = ElementsForOneThread * i;
-				int endElement = (i == threadNum - 1) ? size : startElement + ElementsForOneThread;
-				//Threads.push_back(thread(СMPXCHGFunc()));
+				int endElement = (i == threadNum - 1) ? size : (startElement + ElementsForOneThread > size) ? size : startElement + ElementsForOneThread;
+				Threads.push_back(thread(СMPXCHGFunc, randNum, startElement, endElement, ref(atomic_count), ref(atomic_maxVal), ref(array)));
 			}
 			for (auto& t : Threads) {
 				if (t.joinable()) {
@@ -99,7 +111,7 @@ int main()
 			auto end = chrono::high_resolution_clock::now();
 			auto time = chrono::duration_cast<chrono::nanoseconds>(end - start).count() * 1e-9;
 			cout << threadNum << " thread CMPXCHG time: " << time << " seconds, ";
-			cout << "max = " << maxVal << ", count = " << count << endl;
+			cout << "max = " << atomic_maxVal << ", count = " << atomic_count << endl;
 		}
 		cout << endl << endl;
 	}
