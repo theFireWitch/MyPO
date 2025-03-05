@@ -37,9 +37,7 @@ void СMPXCHGFunc(int rand, int start, int end, atomic<int>& count, atomic<int>&
 				New = expected + 1;
 			} while (!count.compare_exchange_strong(expected, New));
 		}
-		while ((array[i] > (expected = max.load())) && !max.compare_exchange_strong(expected, array[i])) {
-			//expected = max.load();
-		};
+		while ((array[i] > (expected = max.load())) && !max.compare_exchange_strong(expected, array[i])) {};
 	}
 }
 
@@ -47,7 +45,7 @@ int main()
 {
 	srand(time(nullptr));
 	int arraySizes[5] = { 1000, 10000, 100000, 1000000, 10000000 };
-	int threadNums[6] = { 2, 8, 16, 32, 64, 128 };
+	int threadNums[6] = { 4, 8, 16, 32, 64, 128 };
 	int count = 0;
 	int randNum = rand() % 10001;
 	int maxVal = INT32_MIN;
@@ -115,6 +113,5 @@ int main()
 		}
 		cout << endl << endl;
 	}
-
 	return 0;
 }
