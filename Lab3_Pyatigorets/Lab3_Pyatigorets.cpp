@@ -19,6 +19,7 @@ using write_lock = unique_lock<read_write_lock>;
 
 atomic<int> index_global(0);
 mutex text_mutex;
+bool stop_signal = false;
 
 struct Task {
 	int task_id;
@@ -29,6 +30,8 @@ struct Task {
 		random_delay = rand() % (MAX_TIME - MIN_TIME + 1) + MIN_TIME;
 	}
 };
+
+void do_task(Task task);
 
 template <typename task_type_t>
 class task_queue
@@ -81,14 +84,22 @@ public:
 		write_lock _(m_rw_lock);
 		vector<int> indices(buffer_count);
 		iota(indices.begin(), indices.end(), 0);
-		shuffle(indices.begin(), indices.end(), default_random_engine(seed));
+		shuffle(indices.begin(), indices.end(), default_random_engine(chrono::system_clock::now().time_since_epoch().count()));
+		/*text_mutex.lock();
+		cout << indices[0] << indices[1] << indices[2] << endl;
+		text_mutex.unlock();*/
 		for (int idx : indices) {
 			if (buffer[idx].size() < max_queue_size) {
 				buffer[idx].emplace(forward<arguments>(parameters)...);
+				text_mutex.lock();
+				cout << "Queue " << idx << " has " << buffer[idx].size() << " elements" << endl;
+				text_mutex.unlock();
 				return;
 			}
 		}
+		text_mutex.lock();
 		cout << "All buffers in queue are full, can`t add current task!" << endl;
+		text_mutex.unlock();
 	}
 	int get_queue_count() {
 		return buffer_count;
@@ -186,8 +197,8 @@ public:
 				return;
 			}
 		}
-		auto bind = bind(forward<task_t>(task), forward<arguments>(parameters)...);
-		m_tasks.emplace(bind);
+		//auto bind = bind(forward<task_t>(task), forward<arguments>(parameters)...);
+		m_tasks.emplace(task);
 		m_task_waiter.notify_one();
 	}
 //public:
@@ -209,18 +220,54 @@ void do_task(Task task) {
 	text_mutex.lock();
 	cout << "Task " << task.task_id << " started: time to sleep - " << task.random_delay << endl;
 	text_mutex.unlock();
+
 	this_thread::sleep_for(chrono::seconds(task.random_delay));
+
 	text_mutex.lock();
 	cout << "Task " << task.task_id << " completed" << endl;
 	text_mutex.unlock();
+}
+
+void generate_func(thread_pool& pool, int gen_id) {
+	while (!stop_signal) {
+		Task task;
+		text_mutex.lock();
+		cout << "Generator " << gen_id << " adds task " << task.task_id << endl;
+		text_mutex.unlock();
+
+		pool.add_task(task);
+
+		int delay = (rand() % (MAX_TIME - MIN_TIME + 1) + MIN_TIME) / 2;
+		text_mutex.lock();
+		cout << "Generator " << gen_id << " sleeps for " << delay << endl;
+		text_mutex.unlock();
+		this_thread::sleep_for(chrono::seconds(delay));
+	}
 }
 
 int main()
 {
 	srand(seed);
 	int workers_per_queue = 2;
+	int generators_count = 2;
 	thread_pool pool;
 	pool.initialize(workers_per_queue);
+
+	vector<thread> generators;
+	for (size_t i = 0; i < generators_count; ++i) {
+		generators.emplace_back(generate_func, ref(pool), i);
+	}
+	
+	this_thread::sleep_for(chrono::seconds(60));
+	stop_signal = true;
+	pool.terminate();
+
+	for (auto& generator : generators) {
+		if (generator.joinable()) {
+			generator.join();
+		}
+	}
+
 
 	return 0;
 }
