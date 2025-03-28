@@ -7,9 +7,12 @@
 #include <random>
 #include <chrono>
 #include <numeric>
+#include <algorithm>
 
 #define MIN_TIME 6
 #define MAX_TIME 12
+#define MAX_QUEUE_SIZE 10
+#define BUFFER_COUNT 3
 
 using namespace std;
 unsigned seed = chrono::system_clock::now().time_since_epoch().count();
@@ -18,16 +21,22 @@ using read_lock = shared_lock<read_write_lock>;
 using write_lock = unique_lock<read_write_lock>;
 
 atomic<int> index_global(0);
+atomic<int> tasks_created_count(0);
+atomic<int> tasks_rejected_count(0);
+vector<atomic<int>> tasks_in_buffer(BUFFER_COUNT);
+chrono::high_resolution_clock::time_point time_queue_full_start;
+chrono::high_resolution_clock::time_point time_queue_full_end;
+vector<double> time_queue_full;
 mutex text_mutex;
-bool stop_signal = false;
+atomic<bool> stop_signal(false);
 
 struct Task {
 	int task_id;
 	int random_delay;
-	function<void()> task;
-	Task() {
-		task_id = index_global.fetch_add(1);
-		random_delay = rand() % (MAX_TIME - MIN_TIME + 1) + MIN_TIME;
+	Task() {}
+	Task(int id, int delay) {
+		task_id = id;
+		random_delay = delay;
 	}
 };
 
@@ -70,6 +79,12 @@ public:
 		if (!buffer[buffer_id].empty()) {
 			task = move(buffer[buffer_id].front());
 			buffer[buffer_id].pop();
+			if (queue_full) {
+				time_queue_full_end = chrono::high_resolution_clock::now();
+				double duration = chrono::duration_cast<chrono::nanoseconds>(time_queue_full_end - time_queue_full_start).count() * 1e-9;
+				time_queue_full.emplace_back(duration);
+				queue_full = false;
+			}
 			return true;
 		}
 		return false;
@@ -80,31 +95,30 @@ public:
 		vector<int> indices(buffer_count);
 		iota(indices.begin(), indices.end(), 0);
 		shuffle(indices.begin(), indices.end(), default_random_engine(chrono::system_clock::now().time_since_epoch().count()));
-		/*text_mutex.lock();
-		cout << indices[0] << indices[1] << indices[2] << endl;
-		text_mutex.unlock();*/
 		for (int idx : indices) {
 			if (buffer[idx].size() < max_queue_size) {
 				buffer[idx].emplace(forward<arguments>(parameters)...);
+				tasks_in_buffer[idx].fetch_add(1);
 				text_mutex.lock();
 				cout << "Queue " << idx << " has " << buffer[idx].size() << " elements" << endl;
 				text_mutex.unlock();
 				return;
 			}
 		}
+		queue_full = true;
 		text_mutex.lock();
 		cout << "All buffers in queue are full, can`t add current task!" << endl;
 		text_mutex.unlock();
+		tasks_rejected_count.fetch_add(1);
+		time_queue_full_start = chrono::high_resolution_clock::now();
 	}
 	int get_queue_count() {
 		return buffer_count;
 	}
-	int get_queue_max_size() {
-		return max_queue_size;
-	}
 private:
-	const int max_queue_size = 10;
-	const int buffer_count = 3;
+	const int max_queue_size = MAX_QUEUE_SIZE;
+	const int buffer_count = BUFFER_COUNT;
+	bool queue_full = false;
 	mutable read_write_lock m_rw_lock;
 	task_queue_implementation* buffer = new task_queue_implementation[buffer_count];
 };
@@ -150,7 +164,7 @@ public:
 		m_terminated = false;
 		m_initialized = false;
 	}
-	void routine(const int queue_id){ //TODO: add pause
+	void routine(const int queue_id){
 		while (true){
 			bool task_accquiered = false;
 			Task task;
@@ -191,10 +205,13 @@ public:
 		m_task_waiter.notify_all();
 	}
 public:
-	template <typename task_t, typename... arguments>
-	void add_task(task_t&& task, arguments&&... parameters){{
+	template <typename Task, typename... arguments>
+	void add_task(Task&& task, arguments&&... parameters){{
 			read_lock _(m_rw_lock);
-			if (!working_unsafe()) {
+			if (!working_unsafe() || m_paused) {
+				text_mutex.lock();
+				cout << ": rejected" << endl;
+				text_mutex.unlock();
 				return;
 			}
 		}
@@ -225,20 +242,32 @@ void do_task(Task task) {
 
 void generate_func(thread_pool& pool, int gen_id) {
 	srand(chrono::system_clock::now().time_since_epoch().count());
-	while (!stop_signal) {
-		Task task;
+	while (!stop_signal.load()) {
+		int New_id = index_global.fetch_add(1);
+		int random_delay = rand() % (MAX_TIME - MIN_TIME + 1) + MIN_TIME;
+		Task task(New_id, random_delay);
+
 		text_mutex.lock();
-		cout << "Generator " << gen_id << " adds task " << task.task_id << endl;
+		cout << "Generator " << gen_id << " tries to add task " << task.task_id << endl;
 		text_mutex.unlock();
 
+		tasks_created_count.fetch_add(1);
 		pool.add_task(task);
 
-		int delay = rand() % 2 + 1;
+		int delay = (rand() % 3 + 1) * 500;  
 		text_mutex.lock();
-		cout << "Generator " << gen_id << " sleeps for " << delay << endl;
+		cout << "Generator " << gen_id << " sleeps for " << (float)delay / 1000 << "sec." << endl;
 		text_mutex.unlock();
-		this_thread::sleep_for(chrono::seconds(delay));
+		this_thread::sleep_for(chrono::milliseconds(delay));
 	}
+}
+
+void add_pause(thread_pool& pool) {
+	this_thread::sleep_for(chrono::seconds(10));
+	pool.pause();
+	this_thread::sleep_for(chrono::seconds(10));
+	pool.resume();
+	this_thread::sleep_for(chrono::seconds(10));
 }
 
 int main()
@@ -254,12 +283,8 @@ int main()
 		generators.emplace_back(generate_func, ref(pool), i);
 	}
 	
-	this_thread::sleep_for(chrono::seconds(10));
-	pool.pause();
-	this_thread::sleep_for(chrono::seconds(5));
-	pool.resume();
-	this_thread::sleep_for(chrono::seconds(30));
-	stop_signal = true;
+	this_thread::sleep_for(chrono::seconds(60));
+	stop_signal.store(true);
 	pool.terminate();
 
 	for (auto& generator : generators) {
@@ -267,7 +292,19 @@ int main()
 			generator.join();
 		}
 	}
-
-
-	return 0;
+	if (!time_queue_full.empty()) {
+		cout << endl << endl << "Total time queue was full: " << accumulate(time_queue_full.begin(), time_queue_full.end(), 0.0) << " seconds" << endl;
+		cout << "Min time queue was full: " << *min_element(time_queue_full.begin(), time_queue_full.end()) << " seconds" << endl;
+		cout << "Max time queue was full: " << *max_element(time_queue_full.begin(), time_queue_full.end()) << " seconds" << endl;
+	}
+	else {
+		cout << endl << endl << "Total time queue was full: 0 seconds" << endl;
+	}
+	for (int idx = 0; idx < BUFFER_COUNT; idx++) {
+		cout << "Tasks in buffer " << idx + 1 << ": " << tasks_in_buffer[idx] << endl;
+	}
+	cout << "Tasks created: " << tasks_created_count.load() << endl;
+	cout << "Tasks rejected: " << tasks_rejected_count.load() << endl;
+	return 0; 
 }
+
