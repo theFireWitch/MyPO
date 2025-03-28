@@ -43,11 +43,6 @@ public:
 	inline task_queue(const int queue_count) {
 		buffer_count = queue_count;
 	}
-//public:
-	//task_queue(const task_queue& other) = delete;
-	//task_queue(task_queue&& other) = delete;
-	//task_queue& operator=(const task_queue& rhs) = delete;
-	//task_queue& operator=(task_queue&& rhs) = delete;
 	bool empty() const{
 		read_lock _(m_rw_lock);
 		bool result = true;
@@ -163,7 +158,7 @@ public:
 				write_lock _(m_rw_lock);
 				auto wait_condition = [this, &task_accquiered, &task, queue_id] {
 					task_accquiered = m_tasks.pop(task, queue_id);
-					return m_terminated || task_accquiered;
+					return (m_terminated || task_accquiered) && !m_paused;
 					};
 				m_task_waiter.wait(_, wait_condition);
 			}
@@ -180,13 +175,19 @@ public:
 	bool working_unsafe() const{
 		return m_initialized && !m_terminated;
 	}
-	void pause() { // TODO: realization 
+	void pause() {
 		write_lock _(m_rw_lock);
 		m_paused = true;
+		text_mutex.lock();
+		cout << "pause start" << endl;
+		text_mutex.unlock();
 	}
 	void resume() {
 		write_lock _(m_rw_lock);
 		m_paused = false;
+		text_mutex.lock();
+		cout << "pause stop" << endl;
+		text_mutex.unlock();
 		m_task_waiter.notify_all();
 	}
 public:
@@ -197,15 +198,9 @@ public:
 				return;
 			}
 		}
-		//auto bind = bind(forward<task_t>(task), forward<arguments>(parameters)...);
 		m_tasks.emplace(task);
 		m_task_waiter.notify_one();
 	}
-//public:
-//	thread_pool(const thread_pool& other) = delete;
-//	thread_pool(thread_pool&& other) = delete;
-//	thread_pool& operator=(const thread_pool& rhs) = delete;
-//	thread_pool& operator=(thread_pool&& rhs) = delete;
 private:
 	mutable read_write_lock m_rw_lock;
 	mutable condition_variable_any m_task_waiter;
@@ -229,6 +224,7 @@ void do_task(Task task) {
 }
 
 void generate_func(thread_pool& pool, int gen_id) {
+	srand(chrono::system_clock::now().time_since_epoch().count());
 	while (!stop_signal) {
 		Task task;
 		text_mutex.lock();
@@ -237,7 +233,7 @@ void generate_func(thread_pool& pool, int gen_id) {
 
 		pool.add_task(task);
 
-		int delay = (rand() % (MAX_TIME - MIN_TIME + 1) + MIN_TIME) / 2;
+		int delay = rand() % 2 + 1;
 		text_mutex.lock();
 		cout << "Generator " << gen_id << " sleeps for " << delay << endl;
 		text_mutex.unlock();
@@ -247,7 +243,7 @@ void generate_func(thread_pool& pool, int gen_id) {
 
 int main()
 {
-	srand(seed);
+	srand(chrono::system_clock::now().time_since_epoch().count());
 	int workers_per_queue = 2;
 	int generators_count = 2;
 	thread_pool pool;
@@ -258,7 +254,11 @@ int main()
 		generators.emplace_back(generate_func, ref(pool), i);
 	}
 	
-	this_thread::sleep_for(chrono::seconds(60));
+	this_thread::sleep_for(chrono::seconds(10));
+	pool.pause();
+	this_thread::sleep_for(chrono::seconds(5));
+	pool.resume();
+	this_thread::sleep_for(chrono::seconds(30));
 	stop_signal = true;
 	pool.terminate();
 
