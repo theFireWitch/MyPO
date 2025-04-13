@@ -10,8 +10,21 @@ using namespace std;
 
 struct Message {
     uint32_t length;
-    char data[1024];
+    char data[256];
 };
+
+void send_message(string* messageToSend, SOCKET* clientSocket) {
+    Message sendMessage;
+    sendMessage.length = htonl(messageToSend->length());
+    strncpy_s(sendMessage.data, messageToSend->c_str(), sizeof(sendMessage.data) - 1);
+    sendMessage.data[sizeof(sendMessage.data) - 1] = '\0';
+
+
+    size_t bytesSent = send(*clientSocket, (char*)&sendMessage, sizeof(sendMessage.length) + messageToSend->length(), 0);
+    if (bytesSent == -1) {
+        std::cerr << "Error sending message." << std::endl;
+    }
+}
 
 int main() {
 
@@ -39,17 +52,10 @@ int main() {
     }
     cout << "Conection is successful!" << endl;
 
-    string messageToSend = "hello from client";
-    Message sendMessage;
-    sendMessage.length = htonl(messageToSend.length());
-    strncpy_s(sendMessage.data, messageToSend.c_str(), sizeof(sendMessage.data) - 1);
-    sendMessage.data[sizeof(sendMessage.data) - 1] = '\0';
-
-    size_t bytesSent = send(clientSocket, (char*)&sendMessage, sizeof(sendMessage.length) + messageToSend.length(), 0);
-    if (bytesSent == -1) {
-        std::cerr << "Error sending message." << std::endl;
-    }
-
+    string message = "hello from client";
+    string message2 = "by server";
+    send_message(&message, &clientSocket);
+    send_message(&message2, &clientSocket);
     cout << "Data sent successfully" << endl;
 
     closesocket(clientSocket);
