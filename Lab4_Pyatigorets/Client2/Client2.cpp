@@ -106,37 +106,37 @@ int main() {
     string command5 = "GET_RESULT";
     send_message(string("hello from client"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
-    Sleep(2000);
+
     send_message(string("CONNECTION"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
-    Sleep(900);
-    send_message(string("GET_STATUS"), &clientSocket);
+    Sleep(800);
+    /*send_message(string("GET_STATUS"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
-    Sleep(900);
+    Sleep(900);*/
     send_message(string("SEND_DATA"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
-    Sleep(900);
-
-    int arrSize = 20000, threads = 9;
-    send_data(arrSize, threads, &clientSocket);
     Sleep(500);
+
+    int arrSize = 40000, threads = 5;
+    send_data(arrSize, threads, &clientSocket);
+
     send_message(string("START"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
-    Sleep(500);
-    send_message(string("GET_STATUS"), &clientSocket);
-    receiveMessage(&clientSocket, &newmes);
+    Sleep(800);
+    /*send_message(string("GET_STATUS"), &clientSocket);
+    receiveMessage(&clientSocket, &newmes);*/
     send_message(string("GET_RESULT"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
-    
-    int k = 0; 
+
+    int k = 0;
     while (strstr(newmes.data, "RESULT") == NULL && k < 10) {
         Sleep(100);
         send_message(string("GET_RESULT"), &clientSocket);
         receiveMessage(&clientSocket, &newmes);
         k++;
     }
-    send_message(string("GET_STATUS"), &clientSocket);
-    receiveMessage(&clientSocket, &newmes);
+    /*send_message(string("GET_STATUS"), &clientSocket);
+    receiveMessage(&clientSocket, &newmes);*/
     cin >> end;
     cout << "This was a successful connection!" << endl;
     closesocket(clientSocket);
