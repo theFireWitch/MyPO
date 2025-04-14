@@ -98,21 +98,13 @@ int main() {
     cout << "Conection is successful!" << endl;
 
     Message newmes;
-    string message = "hello from client";
-    string command1 = "CONNECTION";
-    string command2 = "SEND_DATA";
-    string command3 = "START";
-    string command4 = "GET_STATUS";
-    string command5 = "GET_RESULT";
     send_message(string("hello from client"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
 
     send_message(string("CONNECTION"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
     Sleep(800);
-    /*send_message(string("GET_STATUS"), &clientSocket);
-    receiveMessage(&clientSocket, &newmes);
-    Sleep(900);*/
+
     send_message(string("SEND_DATA"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
     Sleep(500);
@@ -123,8 +115,7 @@ int main() {
     send_message(string("START"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
     Sleep(800);
-    /*send_message(string("GET_STATUS"), &clientSocket);
-    receiveMessage(&clientSocket, &newmes);*/
+
     send_message(string("GET_RESULT"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
 
@@ -137,7 +128,6 @@ int main() {
     }
     /*send_message(string("GET_STATUS"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);*/
-    cin >> end;
     cout << "This was a successful connection!" << endl;
     closesocket(clientSocket);
     WSACleanup();

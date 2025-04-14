@@ -98,12 +98,6 @@ int main() {
     cout << "Conection is successful!" << endl;
 
     Message newmes;
-    string message = "hello from client";
-    string command1 = "CONNECTION";
-    string command2 = "SEND_DATA";
-    string command3 = "START";
-    string command4 = "GET_STATUS";
-    string command5 = "GET_RESULT";
     send_message(string("hello from client"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
     Sleep(2000);

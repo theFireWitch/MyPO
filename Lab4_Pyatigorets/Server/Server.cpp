@@ -223,6 +223,7 @@ void ClilentThread(Client* ThisClient) {
         }
     }
     closesocket(ThisClient->socket);
+    Clients.erase(ThisClient->client_number);
 }
 
 int main() {
