@@ -116,6 +116,9 @@ int main() {
     Sleep(500);
     send_message(string("START"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
+
+    send_message(string("GET_STATUS"), &clientSocket);
+    receiveMessage(&clientSocket, &newmes);
     Sleep(500);
     send_message(string("GET_STATUS"), &clientSocket);
     receiveMessage(&clientSocket, &newmes);
