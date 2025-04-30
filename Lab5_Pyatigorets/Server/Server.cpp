@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <mutex>
 #include <map>
 #pragma comment(lib, "ws2_32.lib")
 
@@ -13,6 +14,7 @@ using namespace std;
 #define PORT 8080
 #define ROOT_DIR "html"
 atomic<int> index_global(0);
+mutex text_mutex;
 
 struct Client {
     uint32_t client_number;
@@ -32,7 +34,7 @@ string readFile(const string& path) {
 
 void sendResponse(SOCKET client, const string& status, string& content) {
     ostringstream response;
-    response << "HTTP/1.1 " << status << "\r\nContent-Length: " << content.size() << "\r\nContent-Type: text/html\r\n\r\n";
+    response << "HTTP/1.1 " << status << "\r\nContent-Length: " << content.size() << "\r\n\r\n";
     response << content;
     send(client, response.str().c_str(), response.str().length(), 0);
 }
@@ -46,9 +48,11 @@ void handleClient(Client* client) {
         }
         buffer[received] = '\0';
 
-        istringstream request(buffer);
-        string method, path;
-        request >> method >> path;
+        string request(buffer);
+        size_t methodEnd = request.find(' ');
+        size_t pathEnd = request.find(' ', methodEnd + 1);
+        string method = request.substr(0, methodEnd);
+        string path = request.substr(methodEnd + 1, pathEnd - methodEnd - 1);
 
         if (path == "/") path = "/index.html";
         string file = string(ROOT_DIR) + path;
@@ -62,9 +66,10 @@ void handleClient(Client* client) {
             sendResponse(client->socket, "200 OK", content);
         }
     }
+    lock_guard<mutex> lg(text_mutex);
     cout << "Client number " << client->client_number << " disconected." << endl;
-    Clients.erase(client->client_number);
     closesocket(client->socket);
+    Clients.erase(client->client_number);
 }
 
 int main() {
